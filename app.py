@@ -5,31 +5,30 @@ from supabase_client import (
     atualizar_atendimento
 )
 from datetime import datetime, date, timedelta
-from zoneinfo import ZoneInfo
 import random
 import time
 
 
 # -------------------------------------------------------
-# CONFIGURAÇÃO
+# CONFIGURAÇÃO DO APP
 # -------------------------------------------------------
 st.set_page_config(page_title="Sistema de Atendimento", layout="wide")
 
 
 # -------------------------------------------------------
-# Helpers
+# FUNÇÕES AUXILIARES
 # -------------------------------------------------------
 def gerar_ticket():
+    """Gera número único de atendimento."""
     return f"ATD-{datetime.now().strftime('%Y%m%d')}-{random.randint(1000, 9999)}"
 
 
 def parse_iso_datetime(value: str):
-    """Converte datas ISO UTC para horário brasileiro."""
+    """Converte datetime ISO para objeto datetime sem alterar fuso."""
     if not value:
         return None
     try:
-        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        return dt.astimezone(ZoneInfo("America/Sao_Paulo"))
+        return datetime.fromisoformat(value)
     except:
         return None
 
@@ -49,6 +48,7 @@ def estilo_por_status(status: str):
 if "user" not in st.session_state:
     st.session_state.user = None
 
+
 def login_screen():
     st.title("🔐 Login do Sistema")
     email = st.text_input("E-mail")
@@ -59,12 +59,12 @@ def login_screen():
             user = auth_login(email, senha)
             st.session_state.user = user.user
             st.rerun()
-        except Exception as e:
+        except Exception:
             st.error("Erro ao logar. Verifique e-mail e senha.")
 
 
 def logout_button():
-    if st.button("Sair"):
+    if st.sidebar.button("Sair"):
         auth_logout()
         st.session_state.user = None
         st.rerun()
@@ -76,50 +76,25 @@ if not st.session_state.user:
 
 
 # -------------------------------------------------------
-# MENU ESTILIZADO
+# MENU
 # -------------------------------------------------------
-menu_css = """
-<style>
-.menu-btn {
-    width: 100%;
-    padding: 12px 16px;
-    border-radius: 8px;
-    border: 1px solid #d1d5db;
-    background-color: white;
-    margin-bottom: 10px;
-    font-size: 15px;
-    font-weight: 500;
-    text-align: left;
-    cursor: pointer;
-}
-.menu-btn:hover {
-    background-color: #e5e7eb;
-}
-.menu-btn-active {
-    background-color: #2563eb !important;
-    color: white !important;
-}
-</style>
-"""
-st.markdown(menu_css, unsafe_allow_html=True)
-
 st.sidebar.title("Menu")
 
 if "pagina" not in st.session_state:
-    st.session_state["pagina"] = "Novo Atendimento"
+    st.session_state.pagina = "Novo Atendimento"
 
-def set_page(pg):
-    st.session_state["pagina"] = pg
+def mudar_pagina(pg):
+    st.session_state.pagina = pg
 
 if st.sidebar.button("Novo Atendimento"):
-    set_page("Novo Atendimento")
+    mudar_pagina("Novo Atendimento")
 
 if st.sidebar.button("Listar Atendimentos"):
-    set_page("Listar Atendimentos")
+    mudar_pagina("Listar Atendimentos")
 
 logout_button()
 
-opcao = st.session_state["pagina"]
+opcao = st.session_state.pagina
 
 st.title("📞 Sistema de Gerenciamento de Atendimentos")
 
@@ -133,8 +108,9 @@ if opcao == "Novo Atendimento":
 
     with st.expander("📂 Dados da Abertura do Atendimento", expanded=True):
 
-        agora = datetime.now(ZoneInfo("America/Sao_Paulo"))
+        agora = datetime.now()  # HORÁRIO LOCAL
         data_br = agora.strftime("%d/%m/%Y %H:%M")
+
         st.write(f"📅 **Data e hora do atendimento:** {data_br}")
 
         funcionario = st.text_input("Nome do funcionário atendido")
@@ -171,15 +147,15 @@ if opcao == "Novo Atendimento":
                 "numero_chamado": numero_chamado,
                 "tratativa": None,
                 "data_conclusao": None,
-                "updated_at": agora.isoformat(),
+                "ultima_atualizacao": agora.isoformat(),
             }
 
             criar_atendimento(dados)
+
             st.success("✅ Atendimento registrado com sucesso!")
 
-            time.sleep(1.5)
+            time.sleep(1.2)
             st.rerun()
-
 
 
 # =========================================================
@@ -195,9 +171,7 @@ if opcao == "Listar Atendimentos":
         st.info("Nenhum atendimento encontrado.")
         st.stop()
 
-    # -------------------------
-    # FILTROS
-    # -------------------------
+    # ------------------------- FILTROS -------------------------
     with st.expander("🔍 Filtros de pesquisa", expanded=True):
 
         col1, col2, col3 = st.columns(3)
@@ -222,10 +196,7 @@ if opcao == "Listar Atendimentos":
             else:
                 data_inicio = data_fim = None
 
-
-    # -------------------------
-    # FILTRAGEM
-    # -------------------------
+    # ------------------------- PROCESSAR FILTROS -------------------------
     filtrados = []
     for row in dados:
 
@@ -240,9 +211,9 @@ if opcao == "Listar Atendimentos":
         if filtro_assunto != "Todos" and row.get("assunto") != filtro_assunto:
             continue
 
-        dt_atendimento = parse_iso_datetime(row.get("data_atendimento"))
-        if filtrar_periodo and dt_atendimento:
-            if not (data_inicio <= dt_atendimento.date() <= data_fim):
+        dt_abertura = parse_iso_datetime(row.get("data_atendimento"))
+        if filtrar_periodo and dt_abertura:
+            if not (data_inicio <= dt_abertura.date() <= data_fim):
                 continue
 
         filtrados.append(row)
@@ -252,15 +223,13 @@ if opcao == "Listar Atendimentos":
         reverse=True,
     )
 
-    # -------------------------
-    # EXIBIÇÃO DOS REGISTROS
-    # -------------------------
+    # ------------------------- EXIBIR LISTA -------------------------
     for row in filtrados:
 
         dt_abertura = parse_iso_datetime(row.get("data_atendimento"))
         abertura_br = dt_abertura.strftime("%d/%m/%Y %H:%M") if dt_abertura else "—"
 
-        dt_update = parse_iso_datetime(row.get("updated_at"))
+        dt_update = parse_iso_datetime(row.get("ultima_atualizacao"))
         update_br = dt_update.strftime("%d/%m/%Y %H:%M") if dt_update else "—"
 
         bg, borda, icon = estilo_por_status(row.get("andamento"))
@@ -286,7 +255,6 @@ if opcao == "Listar Atendimentos":
   <p>🟢 <b>Última atualização:</b> {update_br}</p>
 
   <p>{icon} <b>Status:</b> {row.get('andamento')}</p>
-
   <p>📝 <b>Tratativa:</b> {row.get('tratativa') or "—"}</p>
 </div>
 """,
@@ -356,8 +324,9 @@ if opcao == "Listar Atendimentos":
                     key=f"trat_{row['id']}",
                 )
 
-
             if st.button("💾 Salvar alterações", key=f"save_{row['id']}"):
+
+                agora = datetime.now()  # HORÁRIO LOCAL
 
                 update_data = {
                     "funcionario_atendido": novo_funcionario,
@@ -366,11 +335,11 @@ if opcao == "Listar Atendimentos":
                     "assunto": novo_assunto,
                     "andamento": novo_status,
                     "tratativa": nova_tratativa,
-                    "updated_at": datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(),
+                    "ultima_atualizacao": agora.isoformat(),
                 }
 
                 if novo_status == "Concluído" and not row.get("data_conclusao"):
-                    update_data["data_conclusao"] = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat()
+                    update_data["data_conclusao"] = agora.isoformat()
 
                 atualizar_atendimento(row["id"], update_data)
 
@@ -378,16 +347,20 @@ if opcao == "Listar Atendimentos":
                 time.sleep(0.5)
                 st.rerun()
 
-
+        # Botão de excluir
         if row.get("andamento") != "Excluído":
             if st.button(f"🗑️ Excluir atendimento", key=f"del_{row['id']}"):
+
+                agora = datetime.now()
+
                 atualizar_atendimento(
                     row["id"],
                     {
                         "andamento": "Excluído",
-                        "updated_at": datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat()
+                        "ultima_atualizacao": agora.isoformat(),
                     }
                 )
+
                 st.warning("Atendimento excluído!")
                 time.sleep(0.5)
                 st.rerun()
