@@ -5,8 +5,22 @@ from supabase_client import (
     atualizar_atendimento
 )
 from datetime import datetime, date, timedelta
+from zoneinfo import ZoneInfo
 import random
 import time
+
+
+# -------------------------------------------------------
+# FUNÇÃO DEFINITIVA: HORÁRIO REAL DE BRASÍLIA SEM UTC
+# -------------------------------------------------------
+def horario_brasilia():
+    """
+    Retorna horário real de Brasília usando timezone oficial,
+    removendo o tzinfo para impedir conversão UTC pelo Supabase.
+    """
+    dt = datetime.now(ZoneInfo("America/Sao_Paulo"))
+    dt_sem_tz = dt.replace(tzinfo=None)
+    return dt_sem_tz.strftime("%Y-%m-%d %H:%M:%S")
 
 
 # -------------------------------------------------------
@@ -19,21 +33,20 @@ st.set_page_config(page_title="Sistema de Atendimento", layout="wide")
 # FUNÇÕES AUXILIARES
 # -------------------------------------------------------
 def gerar_ticket():
-    """Gera número único de atendimento."""
     return f"ATD-{datetime.now().strftime('%Y%m%d')}-{random.randint(1000, 9999)}"
 
 
-def parse_iso_datetime(value: str):
-    """Converte datetime ISO para objeto datetime sem alterar fuso."""
-    if not value:
+def parse_db_datetime(txt):
+    """Converte 'YYYY-MM-DD HH:MM:SS' → datetime."""
+    if not txt:
         return None
     try:
-        return datetime.fromisoformat(value)
+        return datetime.strptime(txt, "%Y-%m-%d %H:%M:%S")
     except:
         return None
 
 
-def estilo_por_status(status: str):
+def estilo_por_status(status):
     status = (status or "").capitalize()
     if status == "Concluído":
         return "#E8F5E9", "#2E7D32", "🟢"
@@ -50,7 +63,7 @@ if "user" not in st.session_state:
 
 
 def login_screen():
-    st.title("🔐 Login do Sistema")
+    st.title("🔐 Login")
     email = st.text_input("E-mail")
     senha = st.text_input("Senha", type="password")
 
@@ -59,8 +72,8 @@ def login_screen():
             user = auth_login(email, senha)
             st.session_state.user = user.user
             st.rerun()
-        except Exception:
-            st.error("Erro ao logar. Verifique e-mail e senha.")
+        except:
+            st.error("Erro ao fazer login.")
 
 
 def logout_button():
@@ -76,27 +89,22 @@ if not st.session_state.user:
 
 
 # -------------------------------------------------------
-# MENU
+# MENU LATERAL
 # -------------------------------------------------------
 st.sidebar.title("Menu")
 
 if "pagina" not in st.session_state:
     st.session_state.pagina = "Novo Atendimento"
 
-def mudar_pagina(pg):
-    st.session_state.pagina = pg
-
 if st.sidebar.button("Novo Atendimento"):
-    mudar_pagina("Novo Atendimento")
+    st.session_state.pagina = "Novo Atendimento"
 
 if st.sidebar.button("Listar Atendimentos"):
-    mudar_pagina("Listar Atendimentos")
+    st.session_state.pagina = "Listar Atendimentos"
 
 logout_button()
 
 opcao = st.session_state.pagina
-
-st.title("📞 Sistema de Gerenciamento de Atendimentos")
 
 
 # =========================================================
@@ -106,61 +114,54 @@ if opcao == "Novo Atendimento":
 
     st.subheader("📝 Registrar Atendimento")
 
-    with st.expander("📂 Dados da Abertura do Atendimento", expanded=True):
+    with st.expander("📂 Dados iniciais", expanded=True):
 
-        agora = datetime.now()  # Horário exato da máquina onde o app está rodando
-        data_br = agora.strftime("%d/%m/%Y %H:%M")
+        agora_db = horario_brasilia()
+        agora_exibir = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M")
 
-        st.write(f"📅 **Data e hora do atendimento:** {data_br}")
+        st.write(f"📅 **Data e hora:** {agora_exibir}")
 
-        funcionario = st.text_input("Nome do funcionário atendido")
-        quem = st.text_input("Quem realizou o atendimento")
-        motivo = st.text_area("Motivo do contato")
-        meio = st.selectbox("Meio de atendimento", ["Telefone", "WhatsApp", "E-mail", "Presencial"])
+        funcionario = st.text_input("Funcionário atendido")
+        quem = st.text_input("Quem realizou")
+        motivo = st.text_area("Motivo")
+        meio = st.selectbox("Meio", ["Telefone", "WhatsApp", "E-mail", "Presencial"])
 
         assunto = st.selectbox(
             "Assunto",
             [
-                "Salário",
-                "Salário Família",
-                "Movimentações Megaged",
-                "Vale Transporte",
-                "Vale Alimentação / Refeição",
-                "Retorno ao Trabalho",
+                "Salário", "Salário Família", "Movimentações Megaged",
+                "Vale Transporte", "VA/VR", "Retorno ao Trabalho"
             ],
         )
 
-        numero_chamado = gerar_ticket()
-        st.write(f"🎫 **Número do chamado:** `{numero_chamado}`")
+        numero = gerar_ticket()
+        st.write(f"🎫 **Chamado:** `{numero}`")
 
         if st.button("💾 Salvar atendimento"):
 
             dados = {
                 "user_id": st.session_state.user.id,
-                "data_atendimento": agora.isoformat(),
+                "data_atendimento": agora_db,
+                "ultima_atualizacao": agora_db,
                 "quem_realizou": quem,
                 "funcionario_atendido": funcionario,
                 "motivo_contato": motivo,
                 "meio_atendimento": meio,
                 "assunto": assunto,
                 "andamento": "Aguardando",
-                "numero_chamado": numero_chamado,
+                "numero_chamado": numero,
                 "tratativa": None,
                 "data_conclusao": None,
-
-                # Horário correto da criação
-                "ultima_atualizacao": agora.isoformat(),
             }
 
             criar_atendimento(dados)
-
-            st.success("✅ Atendimento registrado com sucesso!")
+            st.success("Atendimento registrado!")
             time.sleep(1)
             st.rerun()
 
 
 # =========================================================
-# LISTAR ATENDIMENTOS
+# LISTA DE ATENDIMENTOS
 # =========================================================
 if opcao == "Listar Atendimentos":
 
@@ -172,65 +173,12 @@ if opcao == "Listar Atendimentos":
         st.info("Nenhum atendimento encontrado.")
         st.stop()
 
-    # ------------------------- FILTROS -------------------------
-    with st.expander("🔍 Filtros de pesquisa", expanded=True):
-
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            status_selecionados = st.multiselect(
-                "Status",
-                ["Aguardando", "Concluído"],
-                default=["Aguardando", "Concluído"],
-            )
-            incluir_excluidos = st.checkbox("Incluir excluídos", value=False)
-
-        with col2:
-            assuntos = sorted({d.get("assunto") for d in dados if d.get("assunto")})
-            filtro_assunto = st.selectbox("Assunto", ["Todos"] + assuntos)
-
-        with col3:
-            filtrar_periodo = st.checkbox("Filtrar por período")
-            if filtrar_periodo:
-                data_inicio = st.date_input("Data inicial", date.today() - timedelta(days=7))
-                data_fim = st.date_input("Data final", date.today())
-            else:
-                data_inicio = data_fim = None
-
-    # ------------------------- PROCESSAR FILTROS -------------------------
-    filtrados = []
     for row in dados:
 
-        status = row.get("andamento")
+        dt_abertura = parse_db_datetime(row.get("data_atendimento"))
+        dt_update = parse_db_datetime(row.get("ultima_atualizacao"))
 
-        if status == "Excluído" and not incluir_excluidos:
-            continue
-
-        if status != "Excluído" and status not in status_selecionados:
-            continue
-
-        if filtro_assunto != "Todos" and row.get("assunto") != filtro_assunto:
-            continue
-
-        dt_abertura = parse_iso_datetime(str(row.get("data_atendimento")))
-        if filtrar_periodo and dt_abertura:
-            if not (data_inicio <= dt_abertura.date() <= data_fim):
-                continue
-
-        filtrados.append(row)
-
-    filtrados.sort(
-        key=lambda r: parse_iso_datetime(str(r.get("data_atendimento"))) or datetime.min,
-        reverse=True,
-    )
-
-    # ------------------------- EXIBIR LISTA -------------------------
-    for row in filtrados:
-
-        dt_abertura = parse_iso_datetime(str(row.get("data_atendimento")))
         abertura_br = dt_abertura.strftime("%d/%m/%Y %H:%M") if dt_abertura else "—"
-
-        dt_update = parse_iso_datetime(str(row.get("ultima_atualizacao")))
         update_br = dt_update.strftime("%d/%m/%Y %H:%M") if dt_update else "—"
 
         bg, borda, icon = estilo_por_status(row.get("andamento"))
@@ -238,132 +186,79 @@ if opcao == "Listar Atendimentos":
         st.markdown(
             f"""
 <div style="
-    border-radius: 12px;
-    border: 2px solid {borda};
-    background-color: {bg};
-    padding: 18px;
-    margin-bottom: 16px;
-">
-  <h3>🗂 Chamado: {row.get('numero_chamado')}</h3>
+border-radius: 12px;
+border: 2px solid {borda};
+background-color: {bg};
+padding: 16px;
+margin-bottom: 14px;">
+<b>🗂 Chamado:</b> {row['numero_chamado']}<br>
+<b>🧑‍💼 Funcionário:</b> {row['funcionario_atendido']}<br>
+<b>👤 Quem realizou:</b> {row['quem_realizou']}<br>
+<b>📞 Meio:</b> {row['meio_atendimento']}<br>
+<b>🎯 Assunto:</b> {row['assunto']}<br><br>
 
-  <p>🧑‍💼 <b>Funcionário atendido:</b> {row.get('funcionario_atendido')}</p>
-  <p>👤 <b>Quem realizou:</b> {row.get('quem_realizou')}</p>
+<b>📅 Abertura:</b> {abertura_br}<br>
+<b>🟢 Última atualização:</b> {update_br}<br><br>
 
-  <p>📞 <b>Meio:</b> {row.get('meio_atendimento')}</p>
-  <p>🎯 <b>Assunto:</b> {row.get('assunto')}</p>
-
-  <p>📅 <b>Abertura:</b> {abertura_br}</p>
-  <p>🟢 <b>Última atualização:</b> {update_br}</p>
-
-  <p>{icon} <b>Status:</b> {row.get('andamento')}</p>
-  <p>📝 <b>Tratativa:</b> {row.get('tratativa') or "—"}</p>
+<b>{icon} Status:</b> {row['andamento']}<br>
+<b>📝 Tratativa:</b> {row.get('tratativa') or "—"}<br>
 </div>
 """,
             unsafe_allow_html=True,
         )
 
         # -----------------------------------------------------
-        # EXPANDER DE EDIÇÃO
+        # EDIÇÃO
         # -----------------------------------------------------
-        with st.expander("✏️ Editar / Detalhar este atendimento"):
+        with st.expander("✏️ Editar este atendimento"):
 
-            col1, col2 = st.columns(2)
+            novo_func = st.text_input("Funcionário atendido", row["funcionario_atendido"])
+            novo_quem = st.text_input("Quem realizou", row["quem_realizou"])
+            novo_meio = st.selectbox(
+                "Meio",
+                ["Telefone", "WhatsApp", "E-mail", "Presencial"],
+                index=["Telefone", "WhatsApp", "E-mail", "Presencial"].index(row["meio_atendimento"]),
+            )
+            novo_assunto = st.selectbox(
+                "Assunto",
+                [
+                    "Salário", "Salário Família", "Movimentações Megaged",
+                    "Vale Transporte", "VA/VR", "Retorno ao Trabalho"
+                ],
+                index=[
+                    "Salário", "Salário Família", "Movimentações Megaged",
+                    "Vale Transporte", "VA/VR", "Retorno ao Trabalho"
+                ].index(row["assunto"]),
+            )
+            novo_status = st.selectbox(
+                "Status",
+                ["Aguardando", "Concluído", "Excluído"],
+                index=["Aguardando", "Concluído", "Excluído"].index(row["andamento"])
+            )
+            nova_tratativa = st.text_area("Tratativa", row.get("tratativa") or "")
 
-            with col1:
-                novo_funcionario = st.text_input(
-                    "Funcionário atendido",
-                    value=row.get("funcionario_atendido"),
-                    key=f"func_{row['id']}",
-                )
+            if st.button("💾 Salvar alterações", key=f"save{row['id']}"):
 
-                novo_quem = st.text_input(
-                    "Quem realizou",
-                    value=row.get("quem_realizou"),
-                    key=f"quem_{row['id']}",
-                )
-
-                novo_meio = st.selectbox(
-                    "Meio",
-                    ["Telefone", "WhatsApp", "E-mail", "Presencial"],
-                    index=["Telefone", "WhatsApp", "E-mail", "Presencial"].index(row.get("meio_atendimento")),
-                    key=f"meio_{row['id']}",
-                )
-
-                novo_assunto = st.selectbox(
-                    "Assunto",
-                    [
-                        "Salário",
-                        "Salário Família",
-                        "Movimentações Megaged",
-                        "Vale Transporte",
-                        "Vale Alimentação / Refeição",
-                        "Retorno ao Trabalho",
-                    ],
-                    index=[
-                        "Salário",
-                        "Salário Família",
-                        "Movimentações Megaged",
-                        "Vale Transporte",
-                        "Vale Alimentação / Refeição",
-                        "Retorno ao Trabalho",
-                    ].index(row.get("assunto")),
-                    key=f"assunto_{row['id']}",
-                )
-
-            with col2:
-
-                novo_status = st.selectbox(
-                    "Status",
-                    ["Aguardando", "Concluído", "Excluído"],
-                    index=["Aguardando", "Concluído", "Excluído"].index(row.get("andamento")),
-                    key=f"status_{row['id']}",
-                )
-
-                nova_tratativa = st.text_area(
-                    "Tratativa",
-                    value=row.get("tratativa") or "",
-                    key=f"trat_{row['id']}",
-                )
-
-            if st.button("💾 Salvar alterações", key=f"save_{row['id']}"):
-
-                agora = datetime.now()  # Horário correto da edição
+                agora_edicao = horario_brasilia()
 
                 update_data = {
-                    "funcionario_atendido": novo_funcionario,
+                    "funcionario_atendido": novo_func,
                     "quem_realizou": novo_quem,
                     "meio_atendimento": novo_meio,
                     "assunto": novo_assunto,
                     "andamento": novo_status,
                     "tratativa": nova_tratativa,
-                    "ultima_atualizacao": agora.isoformat(),
+                    "ultima_atualizacao": agora_edicao,
                 }
 
                 if novo_status == "Concluído" and not row.get("data_conclusao"):
-                    update_data["data_conclusao"] = agora.isoformat()
+                    update_data["data_conclusao"] = agora_edicao
 
                 atualizar_atendimento(row["id"], update_data)
 
                 st.success("Alterações salvas!")
-                time.sleep(0.5)
+                time.sleep(1)
                 st.rerun()
 
-        # Botão de excluir
-        if row.get("andamento") != "Excluído":
-            if st.button(f"🗑️ Excluir atendimento", key=f"del_{row['id']}"):
-
-                agora = datetime.now()
-
-                atualizar_atendimento(
-                    row["id"],
-                    {
-                        "andamento": "Excluído",
-                        "ultima_atualizacao": agora.isoformat(),
-                    }
-                )
-
-                st.warning("Atendimento excluído!")
-                time.sleep(0.5)
-                st.rerun()
 
         st.markdown("---")

@@ -19,7 +19,6 @@ def auth_logout():
 
 
 def criar_atendimento(data: dict):
-    """Insere um novo atendimento no banco."""
     return supabase.table("atendimentos").insert(data).execute()
 
 
@@ -35,9 +34,8 @@ def listar_atendimentos(user_id):
 
 def atualizar_atendimento(id_atendimento, dados: dict):
     """
-    Atualiza um atendimento.
-    >>> Importante: NÃO alterar horário aqui.
-    O horário da última atualização sempre vem pronto do app.py.
+    Horários já chegam prontos do app.py.
+    NÃO altere datetime aqui.
     """
     return (
         supabase.table("atendimentos")
