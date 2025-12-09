@@ -1,15 +1,56 @@
+import os
 import streamlit as st
+from dotenv import load_dotenv
 from supabase import create_client
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 
 # ============================================================
-# CARREGAR CREDENCIAIS DO STREAMLIT SECRETS
+# 1) Carregar .env (LOCAL)
 # ============================================================
-SUPABASE_URL = st.secrets["SUPABASE_URL"]
-SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+if os.path.exists(".env"):
+    load_dotenv()
 
+
+# ============================================================
+# 2) Função segura para pegar secrets
+#    → Streamlit Secrets (se existir)
+#    → Caso contrário, usa .env
+# ============================================================
+def get_secret(key: str):
+
+    # Tenta pegar via st.secrets SEM deixar Streamlit lançar erro
+    try:
+        if hasattr(st, "secrets") and key in st.secrets:
+            return st.secrets[key]
+    except Exception:
+        pass  # Ignora erro "No secrets found"
+
+    # Fallback para .env
+    return os.getenv(key)
+
+
+SUPABASE_URL = get_secret("SUPABASE_URL")
+SUPABASE_KEY = get_secret("SUPABASE_KEY")
+
+
+# ============================================================
+# 3) Validação
+# ============================================================
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise ValueError(
+        "❌ Erro: SUPABASE_URL ou SUPABASE_KEY não encontrados.\n"
+        "Certifique-se de que:\n"
+        "• Existe um arquivo .env com as chaves\n"
+        "OU\n"
+        "• Existe um .streamlit/secrets.toml quando rodando no Streamlit Cloud."
+    )
+
+
+# ============================================================
+# 4) Criar cliente Supabase
+# ============================================================
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
@@ -17,28 +58,21 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # AUTENTICAÇÃO
 # ============================================================
 def auth_login(email, password):
-    """Realiza login no Supabase Auth."""
     return supabase.auth.sign_in_with_password({"email": email, "password": password})
 
 
 def auth_logout():
-    """Realiza logout do usuário autenticado."""
     supabase.auth.sign_out()
 
 
 # ============================================================
-# CRIAR ATENDIMENTO
+# CRUD
 # ============================================================
 def criar_atendimento(data: dict):
-    """Insere um novo atendimento no banco."""
     return supabase.table("atendimentos").insert(data).execute()
 
 
-# ============================================================
-# LISTAR ATENDIMENTOS
-# ============================================================
 def listar_atendimentos(user_id):
-    """Lista atendimentos do usuário logado."""
     return (
         supabase.table("atendimentos")
         .select("*")
@@ -48,16 +82,8 @@ def listar_atendimentos(user_id):
     )
 
 
-# ============================================================
-# ATUALIZAR ATENDIMENTO
-# ============================================================
 def atualizar_atendimento(id_atendimento, dados: dict):
-    """
-    Atualiza campos de um atendimento no banco.
-    Sempre atualiza também o updated_at com timezone Brasil.
-    """
     dados["updated_at"] = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat()
-
     return (
         supabase.table("atendimentos")
         .update(dados)
@@ -66,13 +92,7 @@ def atualizar_atendimento(id_atendimento, dados: dict):
     )
 
 
-# ============================================================
-# EXCLUIR (MARCAR COMO EXCLUÍDO)
-# ============================================================
 def excluir_atendimento(id_atendimento):
-    """
-    Marca o atendimento como excluído.
-    """
     return (
         supabase.table("atendimentos")
         .update({

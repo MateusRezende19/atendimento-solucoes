@@ -60,7 +60,7 @@ def login_screen():
             st.session_state.user = user.user
             st.rerun()
         except Exception as e:
-            st.error(f"Erro ao logar: {e}")
+            st.error("Erro ao logar. Verifique e-mail e senha.")
 
 
 def logout_button():
@@ -111,13 +111,10 @@ if "pagina" not in st.session_state:
 def set_page(pg):
     st.session_state["pagina"] = pg
 
-novo_class = "menu-btn menu-btn-active" if st.session_state.pagina == "Novo Atendimento" else "menu-btn"
-listar_class = "menu-btn menu-btn-active" if st.session_state.pagina == "Listar Atendimentos" else "menu-btn"
-
-if st.sidebar.button("Novo Atendimento", key="menu_novo"):
+if st.sidebar.button("Novo Atendimento"):
     set_page("Novo Atendimento")
 
-if st.sidebar.button("Listar Atendimentos", key="menu_listar"):
+if st.sidebar.button("Listar Atendimentos"):
     set_page("Listar Atendimentos")
 
 logout_button()
@@ -148,8 +145,8 @@ if opcao == "Novo Atendimento":
         assunto = st.selectbox(
             "Assunto",
             [
-                "Salário", 
-                "Salário Família", 
+                "Salário",
+                "Salário Família",
                 "Movimentações Megaged",
                 "Vale Transporte",
                 "Vale Alimentação / Refeição",
@@ -286,7 +283,6 @@ if opcao == "Listar Atendimentos":
   <p>🎯 <b>Assunto:</b> {row.get('assunto')}</p>
 
   <p>📅 <b>Abertura:</b> {abertura_br}</p>
-
   <p>🟢 <b>Última atualização:</b> {update_br}</p>
 
   <p>{icon} <b>Status:</b> {row.get('andamento')}</p>
@@ -296,7 +292,6 @@ if opcao == "Listar Atendimentos":
 """,
             unsafe_allow_html=True,
         )
-
 
         # -----------------------------------------------------
         # EXPANDER DE EDIÇÃO
