@@ -1,7 +1,6 @@
 from supabase import create_client
-from datetime import datetime
-import os
 from dotenv import load_dotenv
+import os
 
 load_dotenv()
 
@@ -35,10 +34,11 @@ def listar_atendimentos(user_id):
 
 
 def atualizar_atendimento(id_atendimento, dados: dict):
-    """Atualiza um atendimento e grava a última atualização em horário local."""
-    agora = datetime.now()  # HORÁRIO LOCAL DA MÁQUINA
-    dados["ultima_atualizacao"] = agora.isoformat()
-
+    """
+    Atualiza um atendimento.
+    >>> Importante: NÃO alterar horário aqui.
+    O horário da última atualização sempre vem pronto do app.py.
+    """
     return (
         supabase.table("atendimentos")
         .update(dados)

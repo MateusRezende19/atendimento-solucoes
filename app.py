@@ -108,7 +108,7 @@ if opcao == "Novo Atendimento":
 
     with st.expander("📂 Dados da Abertura do Atendimento", expanded=True):
 
-        agora = datetime.now()  # HORÁRIO LOCAL
+        agora = datetime.now()  # Horário exato da máquina onde o app está rodando
         data_br = agora.strftime("%d/%m/%Y %H:%M")
 
         st.write(f"📅 **Data e hora do atendimento:** {data_br}")
@@ -147,14 +147,15 @@ if opcao == "Novo Atendimento":
                 "numero_chamado": numero_chamado,
                 "tratativa": None,
                 "data_conclusao": None,
+
+                # Horário correto da criação
                 "ultima_atualizacao": agora.isoformat(),
             }
 
             criar_atendimento(dados)
 
             st.success("✅ Atendimento registrado com sucesso!")
-
-            time.sleep(1.2)
+            time.sleep(1)
             st.rerun()
 
 
@@ -211,7 +212,7 @@ if opcao == "Listar Atendimentos":
         if filtro_assunto != "Todos" and row.get("assunto") != filtro_assunto:
             continue
 
-        dt_abertura = parse_iso_datetime(row.get("data_atendimento"))
+        dt_abertura = parse_iso_datetime(str(row.get("data_atendimento")))
         if filtrar_periodo and dt_abertura:
             if not (data_inicio <= dt_abertura.date() <= data_fim):
                 continue
@@ -219,17 +220,17 @@ if opcao == "Listar Atendimentos":
         filtrados.append(row)
 
     filtrados.sort(
-        key=lambda r: parse_iso_datetime(r.get("data_atendimento")) or datetime.min,
+        key=lambda r: parse_iso_datetime(str(r.get("data_atendimento"))) or datetime.min,
         reverse=True,
     )
 
     # ------------------------- EXIBIR LISTA -------------------------
     for row in filtrados:
 
-        dt_abertura = parse_iso_datetime(row.get("data_atendimento"))
+        dt_abertura = parse_iso_datetime(str(row.get("data_atendimento")))
         abertura_br = dt_abertura.strftime("%d/%m/%Y %H:%M") if dt_abertura else "—"
 
-        dt_update = parse_iso_datetime(row.get("ultima_atualizacao"))
+        dt_update = parse_iso_datetime(str(row.get("ultima_atualizacao")))
         update_br = dt_update.strftime("%d/%m/%Y %H:%M") if dt_update else "—"
 
         bg, borda, icon = estilo_por_status(row.get("andamento"))
@@ -326,7 +327,7 @@ if opcao == "Listar Atendimentos":
 
             if st.button("💾 Salvar alterações", key=f"save_{row['id']}"):
 
-                agora = datetime.now()  # HORÁRIO LOCAL
+                agora = datetime.now()  # Horário correto da edição
 
                 update_data = {
                     "funcionario_atendido": novo_funcionario,
