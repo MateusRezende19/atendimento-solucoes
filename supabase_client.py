@@ -23,14 +23,19 @@ def criar_atendimento(data: dict):
     return supabase.table("atendimentos").insert(data).execute()
 
 
-def listar_atendimentos(user_id):
-    return (
-        supabase.table("atendimentos")
-        .select("*")
-        .eq("user_id", user_id)
-        .order("data_atendimento", desc=True)
-        .execute()
-    )
+def listar_atendimentos(user_id=None, admin=False):
+    """
+    Lista atendimentos.
+
+    - Se admin=True → retorna todos os registros.
+    - Se admin=False → filtra por user_id.
+    """
+    query = supabase.table("atendimentos").select("*")
+
+    if not admin:
+        query = query.eq("user_id", user_id)
+
+    return query.order("data_atendimento", desc=True).execute()
 
 
 def atualizar_atendimento(id_atendimento, dados: dict):

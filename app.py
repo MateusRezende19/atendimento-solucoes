@@ -15,6 +15,15 @@ import time
 TZ_UTC = timezone.utc
 TZ_BR = ZoneInfo("America/Sao_Paulo")
 
+# -------------------------------------------------------
+# ADMINS (POR E-MAIL)
+# -------------------------------------------------------
+ADMINS = {
+    "admin@gmail.com",
+    # pode adicionar mais e-mails aqui
+    # "outro.admin@empresa.com",
+}
+
 
 def agora_utc():
     """Retorna datetime atual em UTC."""
@@ -98,6 +107,15 @@ if not st.session_state.user:
     login_screen()
     st.stop()
 
+# -------------------------------------------------------
+# FLAG DE ADMIN
+# -------------------------------------------------------
+try:
+    USER_EMAIL = st.session_state.user.email
+except AttributeError:
+    USER_EMAIL = None
+
+IS_ADMIN = USER_EMAIL in ADMINS
 
 # -------------------------------------------------------
 # MENU
@@ -189,7 +207,11 @@ if opcao == "Listar Atendimentos":
 
     st.subheader("📋 Atendimentos Registrados")
 
-    dados = listar_atendimentos(st.session_state.user.id).data
+    # ADMIN vê todos, usuário normal só vê os seus
+    if IS_ADMIN:
+        dados = listar_atendimentos(None, admin=True).data
+    else:
+        dados = listar_atendimentos(st.session_state.user.id).data
 
     if not dados:
         st.info("Nenhum atendimento encontrado.")
@@ -251,7 +273,7 @@ if opcao == "Listar Atendimentos":
             if filtro_chamado.strip() not in num:
                 continue
 
-        # Período (usando data_atendimento)
+        # Período (usando data_atendimento convertida p/ BR)
         dt_abertura_br = from_db_to_br(row.get("data_atendimento"))
         if filtrar_periodo and dt_abertura_br:
             if not (data_inicio <= dt_abertura_br.date() <= data_fim):
@@ -271,11 +293,16 @@ if opcao == "Listar Atendimentos":
         dt_abertura_br = from_db_to_br(row.get("data_atendimento"))
         dt_update_br = from_db_to_br(row.get("ultima_atualizacao"))
 
-        # 👉 AQUI: apenas DATA, sem horário
+        # Apenas a DATA
         abertura_br = dt_abertura_br.strftime("%d/%m/%Y") if dt_abertura_br else "—"
         update_br = dt_update_br.strftime("%d/%m/%Y") if dt_update_br else "—"
 
         bg, borda, icon = estilo_por_status(row.get("andamento"))
+
+        # Campo "Criado por" só para admin
+        criador_html = ""
+        if IS_ADMIN:
+            criador_html = f"<p>👤 <b>Criado por (user_id):</b> {row.get('user_id')}</p>"
 
         st.markdown(
             f"""
@@ -294,6 +321,8 @@ if opcao == "Listar Atendimentos":
   <p>📞 <b>Meio:</b> {row.get('meio_atendimento')}</p>
   <p>🎯 <b>Assunto:</b> {row.get('assunto')}</p>
 
+  {criador_html}
+
   <p>📅 <b>Abertura (Brasília):</b> {abertura_br}</p>
   <p>🟢 <b>Última atualização (Brasília):</b> {update_br}</p>
 
@@ -305,94 +334,103 @@ if opcao == "Listar Atendimentos":
         )
 
         # -----------------------------------------------------
+        # PERMISSÕES DE EDIÇÃO / EXCLUSÃO
+        # -----------------------------------------------------
+        pode_editar = IS_ADMIN or (row.get("user_id") == st.session_state.user.id)
+        pode_excluir = pode_editar
+
+        # -----------------------------------------------------
         # EDIÇÃO
         # -----------------------------------------------------
-        with st.expander("✏️ Editar / Detalhar este atendimento"):
+        if pode_editar:
+            with st.expander("✏️ Editar / Detalhar este atendimento"):
 
-            col1, col2 = st.columns(2)
+                col1, col2 = st.columns(2)
 
-            with col1:
-                novo_funcionario = st.text_input(
-                    "Funcionário atendido",
-                    value=row.get("funcionario_atendido"),
-                    key=f"func_{row['id']}",
-                )
+                with col1:
+                    novo_funcionario = st.text_input(
+                        "Funcionário atendido",
+                        value=row.get("funcionario_atendido"),
+                        key=f"func_{row['id']}",
+                    )
 
-                novo_quem = st.text_input(
-                    "Quem realizou",
-                    value=row.get("quem_realizou"),
-                    key=f"quem_{row['id']}",
-                )
+                    novo_quem = st.text_input(
+                        "Quem realizou",
+                        value=row.get("quem_realizou"),
+                        key=f"quem_{row['id']}",
+                    )
 
-                novo_meio = st.selectbox(
-                    "Meio",
-                    ["Telefone", "WhatsApp", "E-mail", "Presencial"],
-                    index=["Telefone", "WhatsApp", "E-mail", "Presencial"].index(row.get("meio_atendimento")),
-                    key=f"meio_{row['id']}",
-                )
+                    novo_meio = st.selectbox(
+                        "Meio",
+                        ["Telefone", "WhatsApp", "E-mail", "Presencial"],
+                        index=["Telefone", "WhatsApp", "E-mail", "Presencial"].index(row.get("meio_atendimento")),
+                        key=f"meio_{row['id']}",
+                    )
 
-                novo_assunto = st.selectbox(
-                    "Assunto",
-                    [
-                        "Salário",
-                        "Salário Família",
-                        "Movimentações Megaged",
-                        "Vale Transporte",
-                        "Vale Alimentação / Refeição",
-                        "Retorno ao Trabalho",
-                    ],
-                    index=[
-                        "Salário",
-                        "Salário Família",
-                        "Movimentações Megaged",
-                        "Vale Transporte",
-                        "Vale Alimentação / Refeição",
-                        "Retorno ao Trabalho",
-                    ].index(row.get("assunto")),
-                    key=f"assunto_{row['id']}",
-                )
+                    novo_assunto = st.selectbox(
+                        "Assunto",
+                        [
+                            "Salário",
+                            "Salário Família",
+                            "Movimentações Megaged",
+                            "Vale Transporte",
+                            "Vale Alimentação / Refeição",
+                            "Retorno ao Trabalho",
+                        ],
+                        index=[
+                            "Salário",
+                            "Salário Família",
+                            "Movimentações Megaged",
+                            "Vale Transporte",
+                            "Vale Alimentação / Refeição",
+                            "Retorno ao Trabalho",
+                        ].index(row.get("assunto")),
+                        key=f"assunto_{row['id']}",
+                    )
 
-            with col2:
+                with col2:
 
-                novo_status = st.selectbox(
-                    "Status",
-                    ["Aguardando", "Concluído", "Excluído"],
-                    index=["Aguardando", "Concluído", "Excluído"].index(row.get("andamento")),
-                    key=f"status_{row['id']}",
-                )
+                    novo_status = st.selectbox(
+                        "Status",
+                        ["Aguardando", "Concluído", "Excluído"],
+                        index=["Aguardando", "Concluído", "Excluído"].index(row.get("andamento")),
+                        key=f"status_{row['id']}",
+                    )
 
-                nova_tratativa = st.text_area(
-                    "Tratativa",
-                    value=row.get("tratativa") or "",
-                    key=f"trat_{row['id']}",
-                )
+                    nova_tratativa = st.text_area(
+                        "Tratativa",
+                        value=row.get("tratativa") or "",
+                        key=f"trat_{row['id']}",
+                    )
 
-            if st.button("💾 Salvar alterações", key=f"save_{row['id']}"):
+                if st.button("💾 Salvar alterações", key=f"save_{row['id']}"):
 
-                agora_utc_dt = agora_utc()
-                agora_utc_iso = agora_utc_dt.isoformat()
+                    agora_utc_dt = agora_utc()
+                    agora_utc_iso = agora_utc_dt.isoformat()
 
-                update_data = {
-                    "funcionario_atendido": novo_funcionario,
-                    "quem_realizou": novo_quem,
-                    "meio_atendimento": novo_meio,
-                    "assunto": novo_assunto,
-                    "andamento": novo_status,
-                    "tratativa": nova_tratativa,
-                    "ultima_atualizacao": agora_utc_iso,  # UTC
-                }
+                    update_data = {
+                        "funcionario_atendido": novo_funcionario,
+                        "quem_realizou": novo_quem,
+                        "meio_atendimento": novo_meio,
+                        "assunto": novo_assunto,
+                        "andamento": novo_status,
+                        "tratativa": nova_tratativa,
+                        "ultima_atualizacao": agora_utc_iso,  # UTC
+                    }
 
-                if novo_status == "Concluído" and not row.get("data_conclusao"):
-                    update_data["data_conclusao"] = agora_utc_iso
+                    if novo_status == "Concluído" and not row.get("data_conclusao"):
+                        update_data["data_conclusao"] = agora_utc_iso
 
-                atualizar_atendimento(row["id"], update_data)
+                    atualizar_atendimento(row["id"], update_data)
 
-                st.success("Alterações salvas!")
-                time.sleep(0.5)
-                st.rerun()
+                    st.success("Alterações salvas!")
+                    time.sleep(0.5)
+                    st.rerun()
+        else:
+            st.info("🔒 Você não tem permissão para editar este atendimento.")
 
         # Botão de excluir
-        if row.get("andamento") != "Excluído":
+        if pode_excluir and row.get("andamento") != "Excluído":
             if st.button(f"🗑️ Excluir atendimento", key=f"del_{row['id']}"):
 
                 agora_utc_iso = agora_utc().isoformat()
