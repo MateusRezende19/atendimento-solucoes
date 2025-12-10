@@ -56,7 +56,7 @@ def from_db_to_br(value):
 # -------------------------------------------------------
 # CONFIG
 # -------------------------------------------------------
-st.set_page_config(page_title="Sistema de Atendimento", layout="wide")
+st.set_page_config(page_title="Atendimentos", layout="wide")
 
 
 # -------------------------------------------------------
@@ -83,7 +83,7 @@ if "user" not in st.session_state:
 
 
 def login_screen():
-    st.title("🔐 Login do Sistema")
+    st.title("🕑 Atendimentos")
     email = st.text_input("E-mail")
     senha = st.text_input("Senha", type="password")
 
@@ -134,7 +134,7 @@ if st.sidebar.button("Listar Atendimentos"):
 logout_button()
 
 opcao = st.session_state.pagina
-st.title("📞 Sistema de Gerenciamento de Atendimentos")
+st.title("📞 Gerenciamento de Atendimentos")
 
 
 # =========================================================
