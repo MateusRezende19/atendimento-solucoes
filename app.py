@@ -4,36 +4,60 @@ from supabase_client import (
     criar_atendimento, listar_atendimentos,
     atualizar_atendimento
 )
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
+from zoneinfo import ZoneInfo
 import random
 import time
 
+# -------------------------------------------------------
+# TIMEZONES
+# -------------------------------------------------------
+TZ_UTC = timezone.utc
+TZ_BR = ZoneInfo("America/Sao_Paulo")
+
+
+def agora_utc():
+    """Retorna datetime atual em UTC."""
+    return datetime.now(TZ_UTC)
+
+
+def utc_to_br(dt: datetime):
+    """Converte datetime UTC -> Brasília."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=TZ_UTC)
+    return dt.astimezone(TZ_BR)
+
+
+def from_db_to_br(value):
+    """
+    Converte valor vindo do banco (string ISO ou datetime em UTC)
+    para datetime em Brasília.
+    """
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        dt = datetime.fromisoformat(str(value))
+    return utc_to_br(dt)
+
 
 # -------------------------------------------------------
-# CONFIGURAÇÃO DO APP
+# CONFIG
 # -------------------------------------------------------
 st.set_page_config(page_title="Sistema de Atendimento", layout="wide")
 
 
 # -------------------------------------------------------
-# FUNÇÕES AUXILIARES
+# AUXILIARES
 # -------------------------------------------------------
 def gerar_ticket():
-    """Gera número único de atendimento."""
-    return f"ATD-{datetime.now().strftime('%Y%m%d')}-{random.randint(1000, 9999)}"
+    return f"ATD-{datetime.now(TZ_BR).strftime('%Y%m%d')}-{random.randint(1000, 9999)}"
 
 
-def parse_iso_datetime(value: str):
-    """Converte datetime ISO para objeto datetime sem alterar fuso."""
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value)
-    except:
-        return None
-
-
-def estilo_por_status(status: str):
+def estilo_por_status(status):
     status = (status or "").capitalize()
     if status == "Concluído":
         return "#E8F5E9", "#2E7D32", "🟢"
@@ -83,19 +107,15 @@ st.sidebar.title("Menu")
 if "pagina" not in st.session_state:
     st.session_state.pagina = "Novo Atendimento"
 
-def mudar_pagina(pg):
-    st.session_state.pagina = pg
-
 if st.sidebar.button("Novo Atendimento"):
-    mudar_pagina("Novo Atendimento")
+    st.session_state.pagina = "Novo Atendimento"
 
 if st.sidebar.button("Listar Atendimentos"):
-    mudar_pagina("Listar Atendimentos")
+    st.session_state.pagina = "Listar Atendimentos"
 
 logout_button()
 
 opcao = st.session_state.pagina
-
 st.title("📞 Sistema de Gerenciamento de Atendimentos")
 
 
@@ -108,10 +128,15 @@ if opcao == "Novo Atendimento":
 
     with st.expander("📂 Dados da Abertura do Atendimento", expanded=True):
 
-        agora = datetime.now()  # Horário exato da máquina onde o app está rodando
-        data_br = agora.strftime("%d/%m/%Y %H:%M")
+        # HORÁRIO EM BRASÍLIA PARA EXIBIÇÃO
+        agora_br = datetime.now(TZ_BR)
+        data_br = agora_br.strftime("%d/%m/%Y %H:%M")
 
-        st.write(f"📅 **Data e hora do atendimento:** {data_br}")
+        # HORÁRIO EM UTC PARA SALVAR NO BANCO
+        agora_utc_dt = agora_utc()
+        agora_utc_iso = agora_utc_dt.isoformat()
+
+        st.write(f"📅 **Data e hora do atendimento (Brasília):** {data_br}")
 
         funcionario = st.text_input("Nome do funcionário atendido")
         quem = st.text_input("Quem realizou o atendimento")
@@ -137,7 +162,8 @@ if opcao == "Novo Atendimento":
 
             dados = {
                 "user_id": st.session_state.user.id,
-                "data_atendimento": agora.isoformat(),
+                "data_atendimento": agora_utc_iso,     # UTC
+                "ultima_atualizacao": agora_utc_iso,   # UTC
                 "quem_realizou": quem,
                 "funcionario_atendido": funcionario,
                 "motivo_contato": motivo,
@@ -147,9 +173,6 @@ if opcao == "Novo Atendimento":
                 "numero_chamado": numero_chamado,
                 "tratativa": None,
                 "data_conclusao": None,
-
-                # Horário correto da criação
-                "ultima_atualizacao": agora.isoformat(),
             }
 
             criar_atendimento(dados)
@@ -172,10 +195,12 @@ if opcao == "Listar Atendimentos":
         st.info("Nenhum atendimento encontrado.")
         st.stop()
 
-    # ------------------------- FILTROS -------------------------
+    # -----------------------------------------------------
+    # FILTROS
+    # -----------------------------------------------------
     with st.expander("🔍 Filtros de pesquisa", expanded=True):
 
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
 
         with col1:
             status_selecionados = st.multiselect(
@@ -197,41 +222,58 @@ if opcao == "Listar Atendimentos":
             else:
                 data_inicio = data_fim = None
 
-    # ------------------------- PROCESSAR FILTROS -------------------------
-    filtrados = []
-    for row in dados:
+        with col4:
+            filtro_chamado = st.text_input("Número do chamado")
 
+    # -----------------------------------------------------
+    # APLICAÇÃO DOS FILTROS
+    # -----------------------------------------------------
+    filtrados = []
+
+    for row in dados:
         status = row.get("andamento")
 
+        # Excluídos
         if status == "Excluído" and not incluir_excluidos:
             continue
 
+        # Status selecionados
         if status != "Excluído" and status not in status_selecionados:
             continue
 
+        # Assunto
         if filtro_assunto != "Todos" and row.get("assunto") != filtro_assunto:
             continue
 
-        dt_abertura = parse_iso_datetime(str(row.get("data_atendimento")))
-        if filtrar_periodo and dt_abertura:
-            if not (data_inicio <= dt_abertura.date() <= data_fim):
+        # Número do chamado (contém)
+        if filtro_chamado:
+            num = str(row.get("numero_chamado") or "")
+            if filtro_chamado.strip() not in num:
+                continue
+
+        # Período (usando data_atendimento)
+        dt_abertura_br = from_db_to_br(row.get("data_atendimento"))
+        if filtrar_periodo and dt_abertura_br:
+            if not (data_inicio <= dt_abertura_br.date() <= data_fim):
                 continue
 
         filtrados.append(row)
 
-    filtrados.sort(
-        key=lambda r: parse_iso_datetime(str(r.get("data_atendimento"))) or datetime.min,
-        reverse=True,
-    )
+    if not filtrados:
+        st.info("Nenhum atendimento encontrado com os filtros selecionados.")
+        st.stop()
 
-    # ------------------------- EXIBIR LISTA -------------------------
+    # -----------------------------------------------------
+    # EXIBIÇÃO DOS REGISTROS
+    # -----------------------------------------------------
     for row in filtrados:
 
-        dt_abertura = parse_iso_datetime(str(row.get("data_atendimento")))
-        abertura_br = dt_abertura.strftime("%d/%m/%Y %H:%M") if dt_abertura else "—"
+        dt_abertura_br = from_db_to_br(row.get("data_atendimento"))
+        dt_update_br = from_db_to_br(row.get("ultima_atualizacao"))
 
-        dt_update = parse_iso_datetime(str(row.get("ultima_atualizacao")))
-        update_br = dt_update.strftime("%d/%m/%Y %H:%M") if dt_update else "—"
+        # 👉 AQUI: apenas DATA, sem horário
+        abertura_br = dt_abertura_br.strftime("%d/%m/%Y") if dt_abertura_br else "—"
+        update_br = dt_update_br.strftime("%d/%m/%Y") if dt_update_br else "—"
 
         bg, borda, icon = estilo_por_status(row.get("andamento"))
 
@@ -252,8 +294,8 @@ if opcao == "Listar Atendimentos":
   <p>📞 <b>Meio:</b> {row.get('meio_atendimento')}</p>
   <p>🎯 <b>Assunto:</b> {row.get('assunto')}</p>
 
-  <p>📅 <b>Abertura:</b> {abertura_br}</p>
-  <p>🟢 <b>Última atualização:</b> {update_br}</p>
+  <p>📅 <b>Abertura (Brasília):</b> {abertura_br}</p>
+  <p>🟢 <b>Última atualização (Brasília):</b> {update_br}</p>
 
   <p>{icon} <b>Status:</b> {row.get('andamento')}</p>
   <p>📝 <b>Tratativa:</b> {row.get('tratativa') or "—"}</p>
@@ -263,7 +305,7 @@ if opcao == "Listar Atendimentos":
         )
 
         # -----------------------------------------------------
-        # EXPANDER DE EDIÇÃO
+        # EDIÇÃO
         # -----------------------------------------------------
         with st.expander("✏️ Editar / Detalhar este atendimento"):
 
@@ -327,7 +369,8 @@ if opcao == "Listar Atendimentos":
 
             if st.button("💾 Salvar alterações", key=f"save_{row['id']}"):
 
-                agora = datetime.now()  # Horário correto da edição
+                agora_utc_dt = agora_utc()
+                agora_utc_iso = agora_utc_dt.isoformat()
 
                 update_data = {
                     "funcionario_atendido": novo_funcionario,
@@ -336,11 +379,11 @@ if opcao == "Listar Atendimentos":
                     "assunto": novo_assunto,
                     "andamento": novo_status,
                     "tratativa": nova_tratativa,
-                    "ultima_atualizacao": agora.isoformat(),
+                    "ultima_atualizacao": agora_utc_iso,  # UTC
                 }
 
                 if novo_status == "Concluído" and not row.get("data_conclusao"):
-                    update_data["data_conclusao"] = agora.isoformat()
+                    update_data["data_conclusao"] = agora_utc_iso
 
                 atualizar_atendimento(row["id"], update_data)
 
@@ -352,13 +395,13 @@ if opcao == "Listar Atendimentos":
         if row.get("andamento") != "Excluído":
             if st.button(f"🗑️ Excluir atendimento", key=f"del_{row['id']}"):
 
-                agora = datetime.now()
+                agora_utc_iso = agora_utc().isoformat()
 
                 atualizar_atendimento(
                     row["id"],
                     {
                         "andamento": "Excluído",
-                        "ultima_atualizacao": agora.isoformat(),
+                        "ultima_atualizacao": agora_utc_iso,
                     }
                 )
 
