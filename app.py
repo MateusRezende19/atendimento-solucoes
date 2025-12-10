@@ -179,19 +179,21 @@ if opcao == "Novo Atendimento":
         if st.button("💾 Salvar atendimento"):
 
             dados = {
-                "user_id": st.session_state.user.id,
-                "data_atendimento": agora_utc_iso,     # UTC
-                "ultima_atualizacao": agora_utc_iso,   # UTC
-                "quem_realizou": quem,
-                "funcionario_atendido": funcionario,
-                "motivo_contato": motivo,
-                "meio_atendimento": meio,
-                "assunto": assunto,
-                "andamento": "Aguardando",
-                "numero_chamado": numero_chamado,
-                "tratativa": None,
-                "data_conclusao": None,
-            }
+    "user_id": st.session_state.user.id,
+    "criado_por": st.session_state.user.email,   # <<< ADICIONADO AQUI
+    "data_atendimento": agora_utc_iso,     # UTC
+    "ultima_atualizacao": agora_utc_iso,   # UTC
+    "quem_realizou": quem,
+    "funcionario_atendido": funcionario,
+    "motivo_contato": motivo,
+    "meio_atendimento": meio,
+    "assunto": assunto,
+    "andamento": "Aguardando",
+    "numero_chamado": numero_chamado,
+    "tratativa": None,
+    "data_conclusao": None,
+}
+
 
             criar_atendimento(dados)
 
@@ -302,7 +304,8 @@ if opcao == "Listar Atendimentos":
         # Campo "Criado por" só para admin
         criador_html = ""
         if IS_ADMIN:
-            criador_html = f"<p>👤 <b>Criado por (user_id):</b> {row.get('user_id')}</p>"
+            criador_html = f"<p>👤 <b>Criado por:</b> {row.get('criado_por') or '—'}</p>"
+
 
         st.markdown(
             f"""
