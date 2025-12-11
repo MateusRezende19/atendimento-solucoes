@@ -135,7 +135,7 @@ if opcao == "Novo Atendimento":
         funcionario = st.text_input("Nome do funcionário atendido")
         quem = st.text_input("Quem realizou o atendimento")
         motivo = st.text_area("Motivo do contato")
-        meio = st.selectbox("Meio de atendimento", ["Telefone", "WhatsApp", "E-mail", "Presencial"])
+        meio = st.selectbox("Meio de atendimento", ["Telefone", "WhatsApp", "E-mail", "Presencial", "Solicitação Interna"])
 
         assunto = st.selectbox(
             "Assunto",
@@ -146,6 +146,7 @@ if opcao == "Novo Atendimento":
                 "Vale Transporte",
                 "Vale Alimentação / Refeição",
                 "Retorno ao Trabalho",
+                "Solicitações"
             ],
         )
 
@@ -182,7 +183,6 @@ if opcao == "Listar Atendimentos":
 
     st.subheader("📋 Atendimentos Registrados")
 
-    # ADMIN vê todos
     if IS_ADMIN:
         dados = listar_atendimentos(None, admin=True).data
     else:
@@ -199,6 +199,7 @@ if opcao == "Listar Atendimentos":
 
         col1, col2, col3, col4 = st.columns(4)
 
+        # — STATUS + EXCLUÍDOS
         with col1:
             status_selecionados = st.multiselect(
                 "Status",
@@ -207,10 +208,12 @@ if opcao == "Listar Atendimentos":
             )
             incluir_excluidos = st.checkbox("Incluir excluídos")
 
+        # — ASSUNTO
         with col2:
             assuntos = sorted({d.get("assunto") for d in dados if d.get("assunto")})
             filtro_assunto = st.selectbox("Assunto", ["Todos"] + assuntos)
 
+        # — PERÍODO
         with col3:
             filtrar_periodo = st.checkbox("Filtrar por período")
             if filtrar_periodo:
@@ -219,8 +222,20 @@ if opcao == "Listar Atendimentos":
             else:
                 data_inicio = data_fim = None
 
+        # — CHAMADO
         with col4:
             filtro_chamado = st.text_input("Número do chamado")
+
+        # -------------------------------------------------------
+        # NOVOS FILTROS (OPÇÃO A)
+        # -------------------------------------------------------
+        colA, colB = st.columns(2)
+
+        with colA:
+            filtro_funcionario = st.text_input("Funcionário")
+
+        with colB:
+            filtro_quem_realizou = st.text_input("Atendente")
 
     # -------------------------------------------------------
     # APLICAR FILTROS
@@ -242,6 +257,14 @@ if opcao == "Listar Atendimentos":
         if filtro_chamado and filtro_chamado.strip() not in str(row.get("numero_chamado")):
             continue
 
+        # — FILTRAR FUNCIONÁRIO
+        if filtro_funcionario and filtro_funcionario.lower() not in (row.get("funcionario_atendido") or "").lower():
+            continue
+
+        # — FILTRAR QUEM REALIZOU
+        if filtro_quem_realizou and filtro_quem_realizou.lower() not in (row.get("quem_realizou") or "").lower():
+            continue
+
         dt_abertura_br = from_db_to_br(row.get("data_atendimento"))
 
         if filtrar_periodo and dt_abertura_br:
@@ -255,7 +278,7 @@ if opcao == "Listar Atendimentos":
         st.stop()
 
     # -------------------------------------------------------
-    # PAGINAÇÃO (5 por página)
+    # PAGINAÇÃO
     # -------------------------------------------------------
     itens_por_pagina = 5
     total_registros = len(filtrados)
@@ -264,7 +287,6 @@ if opcao == "Listar Atendimentos":
     if "pagina_atual" not in st.session_state:
         st.session_state.pagina_atual = 1
 
-    # Define intervalo
     inicio = (st.session_state.pagina_atual - 1) * itens_por_pagina
     fim = inicio + itens_por_pagina
     pagina_dados = filtrados[inicio:fim]
@@ -282,9 +304,7 @@ if opcao == "Listar Atendimentos":
 
         bg, borda, icon = estilo_por_status(row.get("andamento"))
 
-        criador_html = ""
-        if IS_ADMIN:
-            criador_html = f"<p>👤 <b>Criado por:</b> {row.get('criado_por')}</p>"
+        criador_html = f"<p>👤 <b>Criado por:</b> {row.get('criado_por')}</p>" if IS_ADMIN else ""
 
         st.markdown(
             f"""
@@ -336,8 +356,8 @@ if opcao == "Listar Atendimentos":
 
                     novo_meio = st.selectbox(
                         "Meio",
-                        ["Telefone", "WhatsApp", "E-mail", "Presencial"],
-                        index=["Telefone", "WhatsApp", "E-mail", "Presencial"].index(row.get("meio_atendimento")),
+                        ["Telefone", "WhatsApp", "E-mail", "Presencial", "Solicitação Interna"],
+                        index=["Telefone", "WhatsApp", "E-mail", "Presencial", "Solicitação Interna"].index(row.get("meio_atendimento")),
                         key=f"meio_{row['id']}",
                     )
 
@@ -412,7 +432,7 @@ if opcao == "Listar Atendimentos":
         st.markdown("---")
 
     # -------------------------------------------------------
-    # PAGINAÇÃO (AGORA NO FINAL DA PÁGINA)
+    # PAGINAÇÃO (NO FINAL)
     # -------------------------------------------------------
     col_pag1, col_pag2, col_pag3 = st.columns([1, 2, 1])
 
