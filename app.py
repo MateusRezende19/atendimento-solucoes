@@ -138,7 +138,7 @@ if opcao == "Novo Atendimento":
 
         meio = st.selectbox(
             "Meio de atendimento",
-            ["Telefone", "WhatsApp", "E-mail", "Presencial", "Solicitação Interna"]  # ADICIONADO
+            ["Telefone", "WhatsApp", "E-mail", "Presencial", "Solicitação Interna"]
         )
 
         assunto = st.selectbox(
@@ -150,7 +150,7 @@ if opcao == "Novo Atendimento":
                 "Vale Transporte",
                 "Vale Alimentação / Refeição",
                 "Retorno ao Trabalho",
-                "Solicitações"  # ADICIONADO
+                "Solicitações"
             ],
         )
 
@@ -226,7 +226,6 @@ if opcao == "Listar Atendimentos":
         with col4:
             filtro_chamado = st.text_input("Número do chamado")
 
-        # NOVOS FILTROS
         colA, colB = st.columns(2)
         with colA:
             filtro_funcionario = st.text_input("Funcionário")
@@ -254,7 +253,6 @@ if opcao == "Listar Atendimentos":
         if filtro_chamado and filtro_chamado.strip() not in str(row.get("numero_chamado")):
             continue
 
-        # novos filtros:
         if filtro_funcionario and filtro_funcionario.lower() not in (row.get("funcionario_atendido") or "").lower():
             continue
 
@@ -302,6 +300,12 @@ if opcao == "Listar Atendimentos":
 
         criador_html = f"<p>👤 <b>Criado por:</b> {row.get('criado_por')}</p>" if IS_ADMIN else ""
 
+        # ----------------------------------------------------------------
+        # 🔥 ALTERAÇÃO QUE VOCÊ PEDIU → Exibir motivo do contato
+        # ----------------------------------------------------------------
+
+        motivo_html = f"<p>💬 <b>Motivo do contato:</b> {row.get('motivo_contato') or '—'}</p>"
+
         st.markdown(
             f"""
 <div style="
@@ -318,6 +322,7 @@ if opcao == "Listar Atendimentos":
   <p>📞 <b>Meio:</b> {row.get('meio_atendimento')}</p>
   <p>🎯 <b>Assunto:</b> {row.get('assunto')}</p>
 
+  {motivo_html}
   {criador_html}
 
   <p>📅 <b>Abertura:</b> {abertura_br}</p>
@@ -340,7 +345,6 @@ if opcao == "Listar Atendimentos":
 
                 col1, col2 = st.columns(2)
 
-                # ------- listas corrigidas -------
                 meios_lista = ["Telefone", "WhatsApp", "E-mail", "Presencial", "Solicitação Interna"]
 
                 assuntos_lista = [
@@ -356,17 +360,8 @@ if opcao == "Listar Atendimentos":
                 meio_salvo = row.get("meio_atendimento")
                 assunto_salvo = row.get("assunto")
 
-                if meio_salvo not in meios_lista:
-                    meio_index = 0
-                else:
-                    meio_index = meios_lista.index(meio_salvo)
-
-                if assunto_salvo not in assuntos_lista:
-                    assunto_index = 0
-                else:
-                    assunto_index = assuntos_lista.index(assunto_salvo)
-
-                # ---------------------------------
+                meio_index = meios_lista.index(meio_salvo) if meio_salvo in meios_lista else 0
+                assunto_index = assuntos_lista.index(assunto_salvo) if assunto_salvo in assuntos_lista else 0
 
                 with col1:
                     novo_funcionario = st.text_input(
